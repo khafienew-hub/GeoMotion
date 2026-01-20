@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GeoMotion Tracker</title>
+    
+    <!-- Tailwind CSS untuk Styling Modern -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome untuk Ikon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Konfigurasi Tailwind & Custom Styles -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        dark: '#0f172a',
+                        card: '#1e293b',
+                        accent: '#3b82f6',
+                        success: '#10b981',
+                        danger: '#ef4444',
+                        textMain: '#f8fafc',
+                        textMuted: '#94a3b8'
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* CSS Reset & Utilitas Tambahan */
+        body {
+            background-color: #0f172a; /* Slate 900 */
+            color: #f8fafc;
+            overscroll-behavior: none; /* Mencegah pull-to-refresh di mobile */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Styling untuk Scrollbar (Sembunyikan agar rapi) */
+        ::-webkit-scrollbar {
+            width: 0px;
+            background: transparent;
+        }
+
+        /* Utility Class untuk Glassmorphism ringan */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-card {
+            transition: transform 0.2s ease;
+        }
+        
+        /* Animasi saat tombol ditekan */
+        .btn-press:active {
+            transform: scale(0.95);
+        }
+
+        /* Transisi Halaman */
+        .fade-enter {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .fade-enter-active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col relative">
+
+    <!-- HEADER -->
+    <header class="px-6 py-5 flex justify-between items-center z-20">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-accent">GeoMotion</h1>
+            <p class="text-xs text-textMuted flex items-center gap-1">
+                <i class="fas fa-satellite-dish text-[10px]" id="gps-icon"></i>
+                <span id="gps-status">Menunggu GPS...</span>
+            </p>
+        </div>
+        <div id="live-indicator" class="hidden">
+            <span class="relative flex h-3 w-3">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+        </div>
+    </header>
+
+    <!-- DASHBOARD UTAMA (Scrollable Area) -->
+    <main class="flex-1 overflow-y-auto pb-32 px-4 scroll-smooth" id="dashboard">
+        
+        <!-- Timer Besar -->
+        <div class="text-center py-6 mb-2">
+            <div id="timer-display" class="text-6xl font-mono font-bold tracking-wider text-white drop-shadow-lg">
+                00:00:00
+            </div>
+            <p class="text-sm text-textMuted mt-1">Durasi Aktivitas</p>
+        </div>
+
+        <!-- Speedometer Card (Highlight) -->
+        <div class="glass-panel rounded-2xl p-6 mb-4 flex flex-col items-center justify-center relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-3 opacity-10">
+                <i class="fas fa-gauge-high text-6xl"></i>
+            </div>
+            <span class="text-textMuted text-sm uppercase tracking-widest font-semibold">Kecepatan</span>
+            <div class="flex items-baseline gap-1 mt-2">
+                <span id="speed-val" class="text-5xl font-bold text-accent">0.0</span>
+                <span class="text-xl text-textMuted">km/j</span>
+            </div>
+        </div>
+
+        <!-- Grid Statistik -->
+        <div class="grid grid-cols-2 gap-3 mb-20">
+            <!-- Langkah -->
+            <div class="stat-card bg-card rounded-xl p-4 border border-slate-700">
+                <div class="text-accent mb-2"><i class="fas fa-shoe-prints"></i></div>
+                <div class="text-2xl font-bold" id="steps-val">0</div>
+                <div class="text-xs text-textMuted">Langkah</div>
+            </div>
+
+            <!-- Jarak -->
+            <div class="stat-card bg-card rounded-xl p-4 border border-slate-700">
+                <div class="text-success mb-2"><i class="fas fa-route"></i></div>
+                <div class="text-2xl font-bold" id="dist-val">0.00</div>
+                <div class="text-xs text-textMuted">Jarak (km)</div>
+            </div>
+
+            <!-- Ketinggian (Altitude) -->
+            <div class="stat-card bg-card rounded-xl p-4 border border-slate-700">
+                <div class="text-purple-400 mb-2"><i class="fas fa-mountain"></i></div>
+                <div class="text-2xl font-bold" id="alt-val">0</div>
+                <div class="text-xs text-textMuted">Altitude (m)</div>
+            </div>
+
+             <!-- Kalori (Estimasi Kasar) -->
+             <div class="stat-card bg-card rounded-xl p-4 border border-slate-700">
+                <div class="text-orange-400 mb-2"><i class="fas fa-fire"></i></div>
+                <div class="text-2xl font-bold" id="cal-val">0</div>
+                <div class="text-xs text-textMuted">Kalori (kcal)</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- KONTROL BAWAH (Fixed Bottom) -->
+    <div class="fixed bottom-0 left-0 w-full p-6 glass-panel border-t border-slate-700 z-30 flex justify-center gap-4 rounded-t-3xl shadow-2xl">
+        
+        <!-- Tombol Start -->
+        <button id="btn-start" onclick="toggleTracking()" 
+            class="btn-press flex-1 bg-gradient-to-r from-accent to-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg flex items-center justify-center gap-2 text-lg">
+            <i class="fas fa-play"></i> MULAI
+        </button>
+
+        <!-- Tombol Finish (Hidden Awalnya) -->
+        <button id="btn-finish" onclick="finishTracking()" 
+            class="hidden btn-press flex-1 bg-gradient-to-r from-red-500 to-pink-600 text-white font-bold py-4 rounded-2xl shadow-lg flex items-center justify-center gap-2 text-lg">
+            <i class="fas fa-flag-checkered"></i> SELESAI
+        </button>
+    </div>
+
+    <!-- OVERLAY SUMMARY (Modal Hasil) -->
+    <div id="summary-modal" class="fixed inset-0 bg-black/90 z-50 hidden flex-col items-center justify-center p-6 opacity-0 transition-opacity duration-300">
+        <div class="bg-card w-full max-w-md rounded-3xl p-6 border border-slate-700 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div class="text-center mb-6">
+                <div class="inline-block p-3 rounded-full bg-success/20 text-success mb-2">
+                    <i class="fas fa-trophy text-3xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-white">Aktivitas Selesai!</h2>
+                <p class="text-textMuted text-sm" id="summary-date">Senin, 1 Jan 2024</p>
+            </div>
+
+            <!-- List Ringkasan -->
+            <div class="space-y-4">
+                <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                    <span class="text-textMuted">Durasi Total</span>
+                    <span class="font-mono font-bold text-xl" id="sum-duration">00:00:00</span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-dark p-3 rounded-lg">
+                        <div class="text-xs text-textMuted">Jarak</div>
+                        <div class="text-lg font-bold text-accent" id="sum-distance">0 km</div>
+                    </div>
+                    <div class="bg-dark p-3 rounded-lg">
+                        <div class="text-xs text-textMuted">Langkah</div>
+                        <div class="text-lg font-bold text-accent" id="sum-steps">0</div>
+                    </div>
+                </div>
+
+                <div class="bg-dark p-4 rounded-lg space-y-2">
+                    <h3 class="text-xs font-bold text-textMuted uppercase mb-2">Elevasi & Kecepatan</h3>
+                    <div class="flex justify-between text-sm">
+                        <span>Max Alt</span>
+                        <span class="font-bold" id="sum-max-alt">0 m</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span>Min Alt</span>
+                        <span class="font-bold" id="sum-min-alt">0 m</span>
+                    </div>
+                     <div class="flex justify-between text-sm text-green-400">
+                        <span>Naik (Gain)</span>
+                        <span class="font-bold" id="sum-gain">0 m</span>
+                    </div>
+                     <div class="flex justify-between text-sm text-red-400">
+                        <span>Turun (Loss)</span>
+                        <span class="font-bold" id="sum-loss">0 m</span>
+                    </div>
+                    <div class="h-px bg-slate-700 my-1"></div>
+                    <div class="flex justify-between text-sm">
+                        <span>Avg Speed</span>
+                        <span class="font-bold" id="sum-avg-speed">0 km/j</span>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="closeSummary()" class="mt-6 w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-semibold transition-colors">
+                Tutup & Reset
+            </button>
+        </div>
+    </div>
+
+    <!-- SCRIPT LOGIC -->
+    <script>
+        // --- State Variables ---
+        let isTracking = false;
+        let startTime = null;
+        let timerInterval = null;
+        let watchId = null;
+        
+        // Data Points
+        let steps = 0;
+        let distance = 0; // dalam meter
+        let maxAlt = -Infinity;
+        let minAlt = Infinity;
+        let elevationGain = 0;
+        let elevationLoss = 0;
+        let speedArr = []; // untuk menghitung rata-rata
+        
+        // Sensor Helper Variables
+        let lastLat = null;
+        let lastLon = null;
+        let lastAlt = null;
+        
+        // Pedometer (Accelerometer) Variables
+        let lastX = 0, lastY = 0, lastZ = 0;
+        let lastStepTime = 0;
+        const stepThreshold = 10; // Sensitivitas langkah
+
+        // DOM Elements
+        const uiTimer = document.getElementById('timer-display');
+        const uiSpeed = document.getElementById('speed-val');
+        const uiSteps = document.getElementById('steps-val');
+        const uiDist = document.getElementById('dist-val');
+        const uiAlt = document.getElementById('alt-val');
+        const uiCal = document.getElementById('cal-val');
+        const btnStart = document.getElementById('btn-start');
+        const btnFinish = document.getElementById('btn-finish');
+        const gpsStatus = document.getElementById('gps-status');
+        const gpsIcon = document.getElementById('gps-icon');
+        const liveIndicator = document.getElementById('live-indicator');
+        const modal = document.getElementById('summary-modal');
+
+        // --- Core Functions ---
+
+        function toggleTracking() {
+            if (!isTracking) {
+                requestPermissionsAndStart();
+            } else {
+                // Pause logic could go here, but requirements specify START/FINISH
+                // So calling toggle while tracking effectively just changes UI state if we had a pause button
+            }
+        }
+
+        function finishTracking() {
+            if (!isTracking) return;
+            
+            stopSensors();
+            showSummary();
+            
+            isTracking = false;
+            updateUIState(false);
+        }
+
+        async function requestPermissionsAndStart() {
+            // Khusus iOS 13+ butuh requestPermission untuk DeviceMotion
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                try {
+                    const response = await DeviceMotionEvent.requestPermission();
+                    if (response === 'granted') {
+                        startTracking();
+                    } else {
+                        alert("Izin sensor gerak diperlukan untuk menghitung langkah.");
+                    }
+                } catch (e) {
+                    console.error(e);
+                    startTracking(); // Coba start anyway (mungkin Android/Desktop)
+                }
+            } else {
+                startTracking(); // Non-iOS atau iOS versi lama
+            }
+        }
+
+        function startTracking() {
+            isTracking = true;
+            startTime = Date.now();
+            
+            // Reset Data
+            steps = 0;
+            distance = 0;
+            elevationGain = 0;
+            elevationLoss = 0;
+            speedArr = [];
+            lastLat = null; lastLon = null; lastAlt = null;
+            maxAlt = -Infinity; minAlt = Infinity;
+
+            // Start Timers & Listeners
+            timerInterval = setInterval(updateTimer, 1000);
+            startSensors();
+            updateUIState(true);
+        }
+
+        function updateUIState(tracking) {
+            if (tracking) {
+                btnStart.classList.add('hidden');
+                btnFinish.classList.remove('hidden');
+                btnFinish.classList.add('flex');
+                liveIndicator.classList.remove('hidden');
+            } else {
+                btnStart.classList.remove('hidden');
+                btnFinish.classList.add('hidden');
+                btnFinish.classList.remove('flex');
+                liveIndicator.classList.add('hidden');
+            }
+        }
+
+        function updateTimer() {
+            const now = Date.now();
+            const diff = now - startTime;
+            
+            const hrs = Math.floor(diff / 3600000);
+            const mins = Math.floor((diff % 3600000) / 60000);
+            const secs = Math.floor((diff % 60000) / 1000);
+            
+            uiTimer.innerText = 
+                `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // --- Sensor Logic ---
+
+        function startSensors() {
+            // 1. Geolocation (GPS)
+            if ("geolocation" in navigator) {
+                gpsStatus.innerText = "Mencari sinyal...";
+                gpsIcon.classList.add("text-yellow-400");
+                
+                watchId = navigator.geolocation.watchPosition(
+                    handleGeoSuccess, 
+                    handleGeoError, 
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 5000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                alert("Geolocation tidak didukung di browser ini.");
+            }
+
+            // 2. Pedometer (Accelerometer)
+            window.addEventListener('devicemotion', handleMotion);
+        }
+
+        function stopSensors() {
+            clearInterval(timerInterval);
+            if (watchId) navigator.geolocation.clearWatch(watchId);
+            window.removeEventListener('devicemotion', handleMotion);
+            
+            gpsStatus.innerText = "GPS Standby";
+            gpsIcon.classList.remove("text-green-400", "text-yellow-400");
+        }
+
+        function handleGeoSuccess(position) {
+            const crd = position.coords;
+            gpsStatus.innerText = `GPS Akurat (${Math.round(crd.accuracy)}m)`;
+            gpsIcon.classList.remove("text-yellow-400");
+            gpsIcon.classList.add("text-green-400");
+
+            // Ignore low accuracy points (misal > 30 meter)
+            if (crd.accuracy > 30) return;
+
+            // Hitung Jarak
+            if (lastLat !== null) {
+                const d = getDistanceFromLatLonInM(lastLat, lastLon, crd.latitude, crd.longitude);
+                // Filter noise GPS (hanya hitung jika bergerak signifikan > 2 meter)
+                if (d > 2) {
+                    distance += d;
+                    
+                    // Hitung Kecepatan (Real-time dari GPS atau kalkulasi manual)
+                    let speedKmh = 0;
+                    if (crd.speed !== null && crd.speed >= 0) {
+                        speedKmh = crd.speed * 3.6; // m/s to km/h
+                    }
+                    speedArr.push(speedKmh);
+                    uiSpeed.innerText = speedKmh.toFixed(1);
+                }
+            }
+
+            // Hitung Elevasi
+            if (crd.altitude !== null) {
+                const currentAlt = crd.altitude;
+                
+                // Update Min/Max
+                if (currentAlt > maxAlt) maxAlt = currentAlt;
+                if (currentAlt < minAlt) minAlt = currentAlt;
+
+                // Update Gain/Loss (Filter noise kecil < 1m)
+                if (lastAlt !== null) {
+                    const altDiff = currentAlt - lastAlt;
+                    if (altDiff > 1) elevationGain += altDiff;
+                    else if (altDiff < -1) elevationLoss += Math.abs(altDiff);
+                }
+                
+                lastAlt = currentAlt;
+                uiAlt.innerText = Math.round(currentAlt);
+            }
+
+            // Simpan posisi terakhir
+            lastLat = crd.latitude;
+            lastLon = crd.longitude;
+
+            // Update UI
+            uiDist.innerText = (distance / 1000).toFixed(2);
+            
+            // Update Kalori (Rumus kasar: 0.05 kcal per step + distance factor)
+            // Atau sederhana: Berat badan (misal 70kg) * jarak (km) * 1.036
+            const kcal = (distance / 1000) * 70 * 1.036;
+            uiCal.innerText = Math.round(kcal);
+        }
+
+        function handleGeoError(err) {
+            console.warn(`ERROR(${err.code}): ${err.message}`);
+            gpsStatus.innerText = "Sinyal Lemah/Hilang";
+            gpsIcon.classList.remove("text-green-400");
+            gpsIcon.classList.add("text-red-400");
+        }
+
+        function handleMotion(event) {
+            // Algoritma Pedometer Sederhana (Peak Detection)
+            const acc = event.accelerationIncludingGravity;
+            if(!acc) return;
+
+            const x = acc.x;
+            const y = acc.y;
+            const z = acc.z;
+
+            // Hitung Magnitude Vektor
+            const mag = Math.sqrt(x*x + y*y + z*z);
+            
+            // Deteksi puncak langkah
+            // Threshold diset sekitar 10-12 (gravitasi ~9.8)
+            // Perlu cooldown (misal 300ms) antar langkah agar tidak double count
+            const now = Date.now();
+            if (mag > stepThreshold + 1 && (now - lastStepTime > 350)) {
+                steps++;
+                lastStepTime = now;
+                uiSteps.innerText = steps;
+                
+                // Animasi kecil pada angka langkah
+                uiSteps.classList.add('scale-125', 'text-accent');
+                setTimeout(() => uiSteps.classList.remove('scale-125', 'text-accent'), 100);
+            }
+        }
+
+        // --- Utility: Haversine Formula ---
+        function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
+            var R = 6371; // Radius bumi dalam km
+            var dLat = deg2rad(lat2-lat1);
+            var dLon = deg2rad(lon2-lon1); 
+            var a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            var d = R * c; // Jarak dalam km
+            return d * 1000; // Return meter
+        }
+
+        function deg2rad(deg) {
+            return deg * (Math.PI/180);
+        }
+
+        // --- Summary & Reset ---
+        function showSummary() {
+            // Populate Data
+            const dateOpts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('summary-date').innerText = new Date().toLocaleDateString('id-ID', dateOpts);
+            
+            document.getElementById('sum-duration').innerText = uiTimer.innerText;
+            document.getElementById('sum-distance').innerText = (distance / 1000).toFixed(2) + " km";
+            document.getElementById('sum-steps').innerText = steps;
+            
+            // Altitudes
+            document.getElementById('sum-max-alt').innerText = (maxAlt === -Infinity ? 0 : Math.round(maxAlt)) + " m";
+            document.getElementById('sum-min-alt').innerText = (minAlt === Infinity ? 0 : Math.round(minAlt)) + " m";
+            document.getElementById('sum-gain').innerText = "+" + Math.round(elevationGain) + " m";
+            document.getElementById('sum-loss').innerText = "-" + Math.round(elevationLoss) + " m";
+
+            // Avg Speed
+            let avgSpeed = 0;
+            if(speedArr.length > 0) {
+                const sum = speedArr.reduce((a, b) => a + b, 0);
+                avgSpeed = (sum / speedArr.length) || 0;
+            }
+            document.getElementById('sum-avg-speed').innerText = avgSpeed.toFixed(1) + " km/j";
+
+            // Show Modal
+            modal.classList.remove('hidden', 'flex');
+            modal.classList.add('flex');
+            // Sedikit delay agar transisi opacity jalan
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+            }, 10);
+        }
+
+        function closeSummary() {
+            modal.classList.add('opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                
+                // Reset UI Dashboard
+                uiTimer.innerText = "00:00:00";
+                uiSpeed.innerText = "0.0";
+                uiSteps.innerText = "0";
+                uiDist.innerText = "0.00";
+                uiAlt.innerText = "0";
+                uiCal.innerText = "0";
+            }, 300);
+        }
+    </script>
+</body>
+</html>

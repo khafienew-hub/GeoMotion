@@ -43,7 +43,7 @@
                         accent: '#3b82f6',
                         accentGlow: 'rgba(59, 130, 246, 0.5)',
                         success: '#10b981',
-                        neon: '#22d3ee', // Warna baru untuk jalur peta
+                        neon: '#2563eb', // Ganti ke Biru yang lebih gelap agar terlihat di OSM
                     },
                     animation: {
                         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -63,13 +63,13 @@
             left: 0; 
             width: 100%; 
             height: 100%; 
-            z-index: 1; /* Pastikan di atas background body tapi di bawah UI */
-            background-color: #1a1a1a; /* Warna fallback jika tile loading */
+            z-index: 1; 
+            background-color: #e5e5e5; /* Warna dasar terang saat loading tile */
         }
         
         /* Glassmorphism Panels */
         .glass {
-            background: rgba(21, 27, 43, 0.85);
+            background: rgba(21, 27, 43, 0.9); /* Sedikit lebih gelap agar teks terbaca di atas peta terang */
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -95,27 +95,28 @@
 </head>
 <body class="h-screen w-screen relative">
 
-    <!-- 1. MAP BACKGROUND (Hapus hardware-accel di sini untuk stabilitas) -->
+    <!-- 1. MAP BACKGROUND -->
     <div id="map"></div>
 
     <!-- 2. TOP HUD (Heads Up Display) -->
-    <header class="absolute top-0 left-0 w-full z-20 p-4 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+    <header class="absolute top-0 left-0 w-full z-20 p-4 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
         <div class="flex justify-between items-start">
             <div>
                 <div class="flex items-center gap-2 pointer-events-auto">
-                    <div class="bg-accent/20 p-2 rounded-lg backdrop-blur-md border border-accent/30">
+                    <div class="bg-panel/90 p-2 rounded-lg backdrop-blur-md border border-white/10 shadow-lg">
                         <i class="fas fa-satellite-dish text-accent animate-pulse"></i>
                     </div>
-                    <div>
+                    <!-- Tambahkan background gelap tipis agar teks terbaca di peta terang -->
+                    <div class="bg-panel/60 px-3 py-1 rounded-lg backdrop-blur-sm">
                         <h1 class="font-bold text-white tracking-tight leading-none">GEOMOTION<span class="text-accent text-xs align-top">PRO</span></h1>
-                        <p class="text-[10px] text-gray-400 font-mono mt-0.5" id="gps-status">INITIALIZING...</p>
+                        <p class="text-[10px] text-gray-300 font-mono mt-0.5" id="gps-status">INITIALIZING...</p>
                     </div>
                 </div>
             </div>
             
             <!-- Tombol History -->
-            <button onclick="toggleHistory()" class="pointer-events-auto bg-panel/80 p-3 rounded-full border border-white/10 hover:bg-panel transition shadow-lg backdrop-blur-md">
-                <i class="fas fa-history text-gray-300"></i>
+            <button onclick="toggleHistory()" class="pointer-events-auto bg-panel/90 p-3 rounded-full border border-white/10 hover:bg-panel transition shadow-lg backdrop-blur-md text-white">
+                <i class="fas fa-history"></i>
             </button>
         </div>
     </header>
@@ -124,14 +125,15 @@
     <div class="absolute bottom-0 left-0 w-full z-20 flex flex-col items-center">
         
         <!-- Stats Card (Floating) -->
-        <div id="stats-panel" class="w-full max-w-lg glass rounded-t-3xl p-6 pb-8 shadow-2xl slide-up transition-transform duration-300 transform translate-y-0">
+        <!-- UPDATED: padding-bottom (pb-20) diperbesar agar tombol naik di Android -->
+        <div id="stats-panel" class="w-full max-w-lg glass rounded-t-3xl p-6 pb-20 shadow-2xl slide-up transition-transform duration-300 transform translate-y-0">
             
             <!-- Drag Handle -->
             <div class="w-12 h-1.5 bg-gray-600/50 rounded-full mx-auto mb-6"></div>
 
             <!-- Timer Besar -->
             <div class="text-center mb-6">
-                <div id="timer-display" class="font-mono text-5xl font-bold text-white tracking-widest drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                <div id="timer-display" class="font-mono text-5xl font-bold text-white tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                     00:00:00
                 </div>
                 <div class="flex justify-center items-center gap-2 mt-2 text-xs text-gray-400 uppercase tracking-widest">
@@ -165,15 +167,15 @@
 
             <!-- Secondary Stats -->
             <div id="extra-stats" class="grid grid-cols-3 gap-2 mb-6 text-center text-xs text-gray-400 transition-all duration-300 opacity-50 hover:opacity-100">
-                <div class="bg-black/20 p-2 rounded">
-                    <i class="fas fa-shoe-prints mb-1 block"></i>
+                <div class="bg-black/40 p-2 rounded border border-white/5">
+                    <i class="fas fa-shoe-prints mb-1 block text-gray-300"></i>
                     <span id="steps-val">0</span> Lngkh
                 </div>
-                <div class="bg-black/20 p-2 rounded">
+                <div class="bg-black/40 p-2 rounded border border-white/5">
                     <i class="fas fa-fire mb-1 block text-orange-500"></i>
                     <span id="cal-val">0</span> Kcal
                 </div>
-                <div class="bg-black/20 p-2 rounded">
+                <div class="bg-black/40 p-2 rounded border border-white/5">
                     <i class="fas fa-mountain mb-1 block text-purple-500"></i>
                     <span id="alt-val">0</span>m Alt
                 </div>
@@ -211,13 +213,18 @@
     <!-- 5. SUMMARY MODAL (Result) -->
     <div id="summary-modal" class="fixed inset-0 bg-black z-50 hidden flex-col overflow-y-auto">
         <div class="p-6">
-            <div class="text-center my-8">
+            <div class="text-center mt-8 mb-4">
                 <div class="inline-flex p-4 rounded-full bg-success/20 text-success mb-4 ring-2 ring-success/50">
                     <i class="fas fa-flag-checkered text-4xl"></i>
                 </div>
                 <h2 class="text-3xl font-bold text-white">Sesi Selesai!</h2>
                 <p class="text-gray-400 text-sm mt-1" id="sum-date">...</p>
             </div>
+
+            <!-- UPDATED: Tombol Simpan dipindahkan ke ATAS -->
+            <button onclick="closeSummary()" class="w-full bg-accent hover:bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg transition mb-6 flex items-center justify-center gap-2">
+                <i class="fas fa-check"></i> SIMPAN & TUTUP
+            </button>
 
             <div class="grid grid-cols-2 gap-4 mb-6">
                 <div class="bg-white/5 p-4 rounded-2xl border border-white/5">
@@ -238,14 +245,12 @@
                 </div>
             </div>
 
-            <div class="bg-white/5 p-4 rounded-2xl border border-white/5 mb-6">
+            <div class="bg-white/5 p-4 rounded-2xl border border-white/5 mb-8">
                 <h3 class="text-xs font-bold text-gray-400 uppercase mb-4">Analisis Kecepatan & Elevasi</h3>
                 <canvas id="activityChart" class="w-full h-48"></canvas>
             </div>
 
-            <button onclick="closeSummary()" class="w-full bg-accent hover:bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg transition mb-8">
-                SIMPAN & TUTUP
-            </button>
+            <!-- Tombol lama di bawah dihapus -->
         </div>
     </div>
 
@@ -310,19 +315,20 @@
                 attributionControl: false 
             }).setView([-6.200, 106.816], 13);
             
-            // Tile Layer (Dark Matter)
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                subdomains: 'abcd', 
-                maxZoom: 19
+            // Tile Layer (OpenStreetMap Standard) - Lebih Terang
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
 
-            // GARIS RUTE (POLYLINE) - Diperjelas
+            // GARIS RUTE (POLYLINE)
+            // Ganti warna ke Biru Tua (#2563eb) agar kontras dengan peta terang
             polyline = L.polyline([], {
-                color: '#22d3ee', // Cyan Neon
-                weight: 6,        // Lebih tebal
+                color: '#2563eb', 
+                weight: 6,
                 opacity: 0.9,
                 lineJoin: 'round',
-                className: 'drop-shadow-[0_0_10px_rgba(34,211,238,0.7)]' // Efek Glow
+                className: 'drop-shadow-md'
             }).addTo(map);
 
             // Invalidate size setelah init untuk memastikan rendering full
@@ -347,11 +353,12 @@
 
         function updateUserMarker(lat, lng) {
             if (!userMarker) {
+                // Marker juga disesuaikan agar terlihat di peta terang
                 const pulseIcon = L.divIcon({
                     className: 'custom-div-icon',
                     html: `<div class="relative flex h-6 w-6">
-                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                              <span class="relative inline-flex rounded-full h-6 w-6 bg-blue-500 border-2 border-white shadow-[0_0_10px_#3b82f6]"></span>
+                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
+                              <span class="relative inline-flex rounded-full h-6 w-6 bg-blue-600 border-2 border-white shadow-lg"></span>
                            </div>`,
                     iconSize: [24, 24], iconAnchor: [12, 12]
                 });

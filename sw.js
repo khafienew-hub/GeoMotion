@@ -3,7 +3,7 @@ const DYNAMIC_CACHE = 'geomotion-dynamic-v1';
 
 // File inti yang wajib ada saat offline pertama kali
 const PRECACHE_URLS = [
-  './geomotion_pro.html',
+  './index.html',
   './manifest.json'
 ];
 

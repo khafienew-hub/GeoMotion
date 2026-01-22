@@ -1,15 +1,23 @@
 {
-  "name": "GeoMotion",
+  "name": "GeoMotion Pro Tracker",
   "short_name": "GeoMotion",
-  "start_url": "index.html",
+  "start_url": "./geomotion_pro.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#0B0F19",
+  "theme_color": "#0B0F19",
+  "orientation": "portrait",
   "icons": [
     {
-      "src": "icon.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/2983/2983696.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2983/2983696.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

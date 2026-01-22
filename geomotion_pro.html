@@ -3,33 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GeoMotion Tracker</title>
+    <title>GeoMotion PRO</title>
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#0B0F19">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2983/2983696.png">
     
-    <!-- Tailwind CSS untuk Styling Modern -->
+    <!-- Link ke Manifest -->
+    <link rel="manifest" href="./manifest.json">
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Font Awesome untuk Ikon -->
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Google Fonts: Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS (Peta) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
 
-    <!-- Konfigurasi Tailwind & Custom Styles -->
+    <!-- Chart.js (Grafik) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
                     },
                     colors: {
-                        dark: '#0f172a',
-                        card: '#1e293b',
+                        dark: '#0B0F19',
+                        panel: '#151b2b',
                         accent: '#3b82f6',
+                        accentGlow: 'rgba(59, 130, 246, 0.5)',
                         success: '#10b981',
-                        danger: '#ef4444',
-                        textMain: '#f8fafc',
-                        textMuted: '#94a3b8'
                     },
                     animation: {
                         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -40,517 +53,668 @@
     </script>
 
     <style>
-        /* CSS Reset & Utilitas Tambahan */
-        body {
-            background-color: #0f172a; /* Slate 900 */
-            color: #f8fafc;
-            overscroll-behavior: none; /* Mencegah pull-to-refresh di mobile */
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        /* Styling untuk Scrollbar (Sembunyikan agar rapi) */
-        ::-webkit-scrollbar {
-            width: 0px;
-            background: transparent;
-        }
-
-        /* Utility Class untuk Glassmorphism ringan */
-        .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .stat-card {
-            transition: transform 0.2s ease;
-        }
+        body { background-color: #0B0F19; color: #f8fafc; overflow: hidden; }
         
-        /* Animasi saat tombol ditekan */
-        .btn-press:active {
-            transform: scale(0.95);
+        /* Map Container Full Screen */
+        #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+        
+        /* Glassmorphism Panels */
+        .glass {
+            background: rgba(21, 27, 43, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
         }
 
-        /* Transisi Halaman */
-        .fade-enter {
-            opacity: 0;
-            transform: translateY(20px);
-            transition: opacity 0.3s ease, transform 0.3s ease;
-        }
-        .fade-enter-active {
-            opacity: 1;
-            transform: translateY(0);
-        }
+        /* Custom Scrollbar */
+        .scroller::-webkit-scrollbar { width: 4px; }
+        .scroller::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+        /* Leaflet Customization */
+        .leaflet-control-attribution { display: none !important; }
+        
+        /* Animations */
+        .slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
     </style>
 </head>
-<body class="h-screen w-screen overflow-hidden flex flex-col relative">
+<body class="h-screen w-screen relative">
 
-    <!-- HEADER -->
-    <header class="px-6 py-5 flex justify-between items-center z-20">
-        <div>
-            <h1 class="text-2xl font-bold tracking-tight text-accent">GeoMotion</h1>
-            <p class="text-xs text-textMuted flex items-center gap-1">
-                <i class="fas fa-satellite-dish text-[10px]" id="gps-icon"></i>
-                <span id="gps-status">Menunggu GPS...</span>
-            </p>
-        </div>
-        <div id="live-indicator" class="hidden">
-            <span class="relative flex h-3 w-3">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-            </span>
+    <!-- 1. MAP BACKGROUND -->
+    <div id="map"></div>
+
+    <!-- 2. TOP HUD (Heads Up Display) -->
+    <header class="absolute top-0 left-0 w-full z-20 p-4 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+        <div class="flex justify-between items-start">
+            <div>
+                <div class="flex items-center gap-2 pointer-events-auto">
+                    <div class="bg-accent/20 p-2 rounded-lg backdrop-blur-md border border-accent/30">
+                        <i class="fas fa-satellite-dish text-accent animate-pulse"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-white tracking-tight leading-none">GEOMOTION<span class="text-accent text-xs align-top">PRO</span></h1>
+                        <p class="text-[10px] text-gray-400 font-mono mt-0.5" id="gps-status">INITIALIZING...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tombol History -->
+            <button onclick="toggleHistory()" class="pointer-events-auto bg-panel/80 p-3 rounded-full border border-white/10 hover:bg-panel transition shadow-lg backdrop-blur-md">
+                <i class="fas fa-history text-gray-300"></i>
+            </button>
         </div>
     </header>
 
-    <!-- DASHBOARD UTAMA (Scrollable Area) -->
-    <main class="flex-1 overflow-y-auto pb-32 px-4 scroll-smooth" id="dashboard">
+    <!-- 3. MAIN DASHBOARD (Bottom Sheet) -->
+    <div class="absolute bottom-0 left-0 w-full z-20 flex flex-col items-center">
         
-        <!-- Timer Besar -->
-        <div class="text-center py-6 mb-2">
-            <div id="timer-display" class="text-6xl font-mono font-bold tracking-wider text-white drop-shadow-lg">
-                00:00:00
+        <!-- Stats Card (Floating) -->
+        <div id="stats-panel" class="w-full max-w-lg glass rounded-t-3xl p-6 pb-8 shadow-2xl slide-up transition-transform duration-300 transform translate-y-0">
+            
+            <!-- Drag Handle -->
+            <div class="w-12 h-1.5 bg-gray-600/50 rounded-full mx-auto mb-6"></div>
+
+            <!-- Timer Besar -->
+            <div class="text-center mb-6">
+                <div id="timer-display" class="font-mono text-5xl font-bold text-white tracking-widest drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                    00:00:00
+                </div>
+                <div class="flex justify-center items-center gap-2 mt-2 text-xs text-gray-400 uppercase tracking-widest">
+                    <span id="recording-dot" class="w-2 h-2 rounded-full bg-red-500 hidden animate-ping"></span>
+                    <span id="status-text">Ready to Start</span>
+                </div>
             </div>
-            <p class="text-sm text-textMuted mt-1">Durasi Aktivitas</p>
+
+            <!-- Grid Data Utama -->
+            <div class="grid grid-cols-3 gap-4 mb-8">
+                <!-- Jarak -->
+                <div class="text-center">
+                    <div class="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">Jarak (km)</div>
+                    <div class="text-2xl font-bold text-white" id="dist-val">0.00</div>
+                </div>
+                <!-- Kecepatan -->
+                <div class="text-center border-x border-white/10 px-2 relative">
+                    <div class="text-accent text-[10px] uppercase font-bold tracking-wider mb-1">Speed (km/h)</div>
+                    <div class="text-3xl font-bold text-accent" id="speed-val">0.0</div>
+                    <!-- Speed Bar Indicator -->
+                    <div class="h-1 w-full bg-gray-700 rounded-full mt-2 overflow-hidden">
+                        <div id="speed-bar" class="h-full bg-accent transition-all duration-500 w-0"></div>
+                    </div>
+                </div>
+                <!-- Pace (Menit/Km) -->
+                <div class="text-center">
+                    <div class="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">Pace</div>
+                    <div class="text-2xl font-bold text-white" id="pace-val">--:--</div>
+                </div>
+            </div>
+
+            <!-- Secondary Stats (Hidden by default, expandable) -->
+            <div id="extra-stats" class="grid grid-cols-3 gap-2 mb-6 text-center text-xs text-gray-400 transition-all duration-300 opacity-50 hover:opacity-100">
+                <div class="bg-black/20 p-2 rounded">
+                    <i class="fas fa-shoe-prints mb-1 block"></i>
+                    <span id="steps-val">0</span> Lngkh
+                </div>
+                <div class="bg-black/20 p-2 rounded">
+                    <i class="fas fa-fire mb-1 block text-orange-500"></i>
+                    <span id="cal-val">0</span> Kcal
+                </div>
+                <div class="bg-black/20 p-2 rounded">
+                    <i class="fas fa-mountain mb-1 block text-purple-500"></i>
+                    <span id="alt-val">0</span>m Alt
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex gap-4">
+                <button id="btn-start" onclick="toggleTracking()" class="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold py-4 rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all active:scale-95 flex items-center justify-center gap-2 text-lg uppercase tracking-wide">
+                    <i class="fas fa-play"></i> Mulai
+                </button>
+                
+                <button id="btn-stop" onclick="finishTracking()" class="hidden flex-1 bg-gradient-to-r from-red-600 to-pink-600 text-white font-bold py-4 rounded-2xl shadow-[0_0_20px_rgba(239,68,68,0.3)] transition-all active:scale-95 items-center justify-center gap-2 text-lg uppercase tracking-wide">
+                    <i class="fas fa-stop"></i> Selesai
+                </button>
+            </div>
         </div>
-
-        <!-- Speedometer Card (Highlight) -->
-        <div class="glass-panel rounded-2xl p-6 mb-4 flex flex-col items-center justify-center relative overflow-hidden">
-            <div class="absolute top-0 right-0 p-3 opacity-10">
-                <i class="fas fa-gauge-high text-6xl"></i>
-            </div>
-            <span class="text-textMuted text-sm uppercase tracking-widest font-semibold">Kecepatan</span>
-            <div class="flex items-baseline gap-1 mt-2">
-                <span id="speed-val" class="text-5xl font-bold text-accent">0.0</span>
-                <span class="text-xl text-textMuted">km/j</span>
-            </div>
-        </div>
-
-        <!-- Grid Statistik -->
-        <div class="grid grid-cols-2 gap-3 mb-20">
-            <!-- Langkah -->
-            <div class="stat-card bg-card rounded-xl p-4 border border-slate-700">
-                <div class="text-accent mb-2"><i class="fas fa-shoe-prints"></i></div>
-                <div class="text-2xl font-bold" id="steps-val">0</div>
-                <div class="text-xs text-textMuted">Langkah</div>
-            </div>
-
-            <!-- Jarak -->
-            <div class="stat-card bg-card rounded-xl p-4 border border-slate-700">
-                <div class="text-success mb-2"><i class="fas fa-route"></i></div>
-                <div class="text-2xl font-bold" id="dist-val">0.00</div>
-                <div class="text-xs text-textMuted">Jarak (km)</div>
-            </div>
-
-            <!-- Ketinggian (Altitude) -->
-            <div class="stat-card bg-card rounded-xl p-4 border border-slate-700">
-                <div class="text-purple-400 mb-2"><i class="fas fa-mountain"></i></div>
-                <div class="text-2xl font-bold" id="alt-val">0</div>
-                <div class="text-xs text-textMuted">Altitude (m)</div>
-            </div>
-
-             <!-- Kalori (Estimasi Kasar) -->
-             <div class="stat-card bg-card rounded-xl p-4 border border-slate-700">
-                <div class="text-orange-400 mb-2"><i class="fas fa-fire"></i></div>
-                <div class="text-2xl font-bold" id="cal-val">0</div>
-                <div class="text-xs text-textMuted">Kalori (kcal)</div>
-            </div>
-        </div>
-    </main>
-
-    <!-- KONTROL BAWAH (Fixed Bottom) -->
-    <div class="fixed bottom-0 left-0 w-full p-6 glass-panel border-t border-slate-700 z-30 flex justify-center gap-4 rounded-t-3xl shadow-2xl">
-        
-        <!-- Tombol Start -->
-        <button id="btn-start" onclick="toggleTracking()" 
-            class="btn-press flex-1 bg-gradient-to-r from-accent to-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg flex items-center justify-center gap-2 text-lg">
-            <i class="fas fa-play"></i> MULAI
-        </button>
-
-        <!-- Tombol Finish (Hidden Awalnya) -->
-        <button id="btn-finish" onclick="finishTracking()" 
-            class="hidden btn-press flex-1 bg-gradient-to-r from-red-500 to-pink-600 text-white font-bold py-4 rounded-2xl shadow-lg flex items-center justify-center gap-2 text-lg">
-            <i class="fas fa-flag-checkered"></i> SELESAI
-        </button>
     </div>
 
-    <!-- OVERLAY SUMMARY (Modal Hasil) -->
-    <div id="summary-modal" class="fixed inset-0 bg-black/90 z-50 hidden flex-col items-center justify-center p-6 opacity-0 transition-opacity duration-300">
-        <div class="bg-card w-full max-w-md rounded-3xl p-6 border border-slate-700 shadow-2xl overflow-y-auto max-h-[90vh]">
-            <div class="text-center mb-6">
-                <div class="inline-block p-3 rounded-full bg-success/20 text-success mb-2">
-                    <i class="fas fa-trophy text-3xl"></i>
+    <!-- 4. HISTORY MODAL -->
+    <div id="history-modal" class="fixed inset-0 bg-black/90 z-50 hidden opacity-0 transition-opacity duration-300 backdrop-blur-sm">
+        <div class="absolute inset-x-0 bottom-0 top-10 bg-panel rounded-t-3xl overflow-hidden flex flex-col shadow-2xl border-t border-white/10">
+            <div class="p-6 flex justify-between items-center border-b border-white/5 bg-black/20">
+                <h2 class="text-xl font-bold text-white"><i class="fas fa-history text-accent mr-2"></i>Riwayat</h2>
+                <button onclick="toggleHistory()" class="text-gray-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 scroller" id="history-list">
+                <!-- History Items injected here -->
+                <div class="text-center text-gray-500 mt-10">Belum ada riwayat aktivitas.</div>
+            </div>
+            <div class="p-4 border-t border-white/5 bg-black/20">
+                <button onclick="clearHistory()" class="w-full py-3 text-red-400 text-sm font-semibold hover:bg-red-900/20 rounded-xl transition">Hapus Semua Data</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. SUMMARY MODAL (Result) -->
+    <div id="summary-modal" class="fixed inset-0 bg-black z-50 hidden flex-col overflow-y-auto">
+        <div class="p-6">
+            <div class="text-center my-8">
+                <div class="inline-flex p-4 rounded-full bg-success/20 text-success mb-4 ring-2 ring-success/50">
+                    <i class="fas fa-flag-checkered text-4xl"></i>
                 </div>
-                <h2 class="text-2xl font-bold text-white">Aktivitas Selesai!</h2>
-                <p class="text-textMuted text-sm" id="summary-date">Senin, 1 Jan 2024</p>
+                <h2 class="text-3xl font-bold text-white">Sesi Selesai!</h2>
+                <p class="text-gray-400 text-sm mt-1" id="sum-date">Minggu, 12 Okt 2024</p>
             </div>
 
-            <!-- List Ringkasan -->
-            <div class="space-y-4">
-                <div class="flex justify-between items-center border-b border-slate-700 pb-2">
-                    <span class="text-textMuted">Durasi Total</span>
-                    <span class="font-mono font-bold text-xl" id="sum-duration">00:00:00</span>
+            <!-- Summary Stats -->
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <div class="text-xs text-gray-400 uppercase">Jarak Total</div>
+                    <div class="text-2xl font-bold text-white mt-1" id="sum-dist">0.00 <span class="text-sm font-normal text-gray-500">km</span></div>
                 </div>
-                
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="bg-dark p-3 rounded-lg">
-                        <div class="text-xs text-textMuted">Jarak</div>
-                        <div class="text-lg font-bold text-accent" id="sum-distance">0 km</div>
-                    </div>
-                    <div class="bg-dark p-3 rounded-lg">
-                        <div class="text-xs text-textMuted">Langkah</div>
-                        <div class="text-lg font-bold text-accent" id="sum-steps">0</div>
-                    </div>
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <div class="text-xs text-gray-400 uppercase">Durasi</div>
+                    <div class="text-2xl font-bold text-white mt-1 font-mono" id="sum-time">00:00:00</div>
                 </div>
-
-                <div class="bg-dark p-4 rounded-lg space-y-2">
-                    <h3 class="text-xs font-bold text-textMuted uppercase mb-2">Elevasi & Kecepatan</h3>
-                    <div class="flex justify-between text-sm">
-                        <span>Max Alt</span>
-                        <span class="font-bold" id="sum-max-alt">0 m</span>
-                    </div>
-                    <div class="flex justify-between text-sm">
-                        <span>Min Alt</span>
-                        <span class="font-bold" id="sum-min-alt">0 m</span>
-                    </div>
-                     <div class="flex justify-between text-sm text-green-400">
-                        <span>Naik (Gain)</span>
-                        <span class="font-bold" id="sum-gain">0 m</span>
-                    </div>
-                     <div class="flex justify-between text-sm text-red-400">
-                        <span>Turun (Loss)</span>
-                        <span class="font-bold" id="sum-loss">0 m</span>
-                    </div>
-                    <div class="h-px bg-slate-700 my-1"></div>
-                    <div class="flex justify-between text-sm">
-                        <span>Avg Speed</span>
-                        <span class="font-bold" id="sum-avg-speed">0 km/j</span>
-                    </div>
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <div class="text-xs text-gray-400 uppercase">Avg Pace</div>
+                    <div class="text-xl font-bold text-white mt-1" id="sum-pace">0'00" <span class="text-sm font-normal text-gray-500">/km</span></div>
+                </div>
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <div class="text-xs text-gray-400 uppercase">Kalori</div>
+                    <div class="text-xl font-bold text-orange-400 mt-1" id="sum-cals">0 <span class="text-sm font-normal text-gray-500">kcal</span></div>
                 </div>
             </div>
 
-            <button onclick="closeSummary()" class="mt-6 w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-semibold transition-colors">
-                Tutup & Reset
+            <!-- Chart Container -->
+            <div class="bg-white/5 p-4 rounded-2xl border border-white/5 mb-6">
+                <h3 class="text-xs font-bold text-gray-400 uppercase mb-4">Analisis Kecepatan & Elevasi</h3>
+                <canvas id="activityChart" class="w-full h-48"></canvas>
+            </div>
+
+            <button onclick="closeSummary()" class="w-full bg-accent hover:bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg transition mb-8">
+                SIMPAN & TUTUP
             </button>
         </div>
     </div>
 
-    <!-- SCRIPT LOGIC -->
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <script>
-        // --- State Variables ---
+        // --- PWA SERVICE WORKER REGISTRATION (BARU) ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                // Pastikan file service-worker.js berada di folder yang sama
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(reg => console.log('Service Worker Registered! Scope:', reg.scope))
+                    .catch(err => console.log('Service Worker Error:', err));
+            });
+        }
+
+        // --- CONFIG & STATE ---
+        let map, userMarker, polyline;
+        let pathCoordinates = []; // Array [lat, lng]
+        let speedHistory = []; // Untuk chart
+        let elevationHistory = []; // Untuk chart
+        
         let isTracking = false;
+        let watchId = null;
         let startTime = null;
         let timerInterval = null;
-        let watchId = null;
         
-        // Data Points
+        // Data Metrik
+        let distance = 0; // meter
         let steps = 0;
-        let distance = 0; // dalam meter
-        let maxAlt = -Infinity;
-        let minAlt = Infinity;
-        let elevationGain = 0;
-        let elevationLoss = 0;
-        let speedArr = []; // untuk menghitung rata-rata
-        
-        // Sensor Helper Variables
-        let lastLat = null;
-        let lastLon = null;
+        let lastLat = null, lastLon = null;
         let lastAlt = null;
+        let maxAlt = -Infinity, minAlt = Infinity;
+        let totalElevationGain = 0;
         
-        // Pedometer (Accelerometer) Variables
-        let lastX = 0, lastY = 0, lastZ = 0;
+        // Pedometer
+        let lastX=0, lastY=0, lastZ=0;
         let lastStepTime = 0;
-        const stepThreshold = 10; // Sensitivitas langkah
 
-        // DOM Elements
-        const uiTimer = document.getElementById('timer-display');
-        const uiSpeed = document.getElementById('speed-val');
-        const uiSteps = document.getElementById('steps-val');
-        const uiDist = document.getElementById('dist-val');
-        const uiAlt = document.getElementById('alt-val');
-        const uiCal = document.getElementById('cal-val');
+        // UI Elements
+        const elTimer = document.getElementById('timer-display');
+        const elDist = document.getElementById('dist-val');
+        const elSpeed = document.getElementById('speed-val');
+        const elPace = document.getElementById('pace-val');
+        const elSteps = document.getElementById('steps-val');
+        const elAlt = document.getElementById('alt-val');
+        const elCal = document.getElementById('cal-val');
+        const elGpsStatus = document.getElementById('gps-status');
+        const elStatusText = document.getElementById('status-text');
         const btnStart = document.getElementById('btn-start');
-        const btnFinish = document.getElementById('btn-finish');
-        const gpsStatus = document.getElementById('gps-status');
-        const gpsIcon = document.getElementById('gps-icon');
-        const liveIndicator = document.getElementById('live-indicator');
-        const modal = document.getElementById('summary-modal');
+        const btnStop = document.getElementById('btn-stop');
+        const recordingDot = document.getElementById('recording-dot');
 
-        // --- Core Functions ---
-
-        function toggleTracking() {
-            if (!isTracking) {
-                requestPermissionsAndStart();
-            } else {
-                // Pause logic could go here, but requirements specify START/FINISH
-                // So calling toggle while tracking effectively just changes UI state if we had a pause button
+        // --- 1. INITIALIZATION ---
+        
+        window.onload = function() {
+            initMap();
+            loadHistory(); // Load data from localStorage
+            
+            // Check permissions early
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                // iOS requires user interaction, handled in Start button
             }
+        };
+
+        function initMap() {
+            // Default center (Indonesia general), will jump to user location
+            map = L.map('map', { zoomControl: false }).setView([-6.200000, 106.816666], 13);
+            
+            // Tile Layer: CartoDB Dark Matter (Futuristic Look)
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(map);
+
+            // Create empty polyline
+            polyline = L.polyline([], {
+                color: '#3b82f6', // Accent Blue
+                weight: 5,
+                opacity: 0.8,
+                lineJoin: 'round'
+            }).addTo(map);
+
+            // Initial User Location (Single shot)
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const { latitude, longitude } = pos.coords;
+                    updateUserMarker(latitude, longitude);
+                    map.setView([latitude, longitude], 16);
+                    elGpsStatus.innerText = "GPS LOCKED - READY";
+                    elGpsStatus.classList.add("text-success");
+                },
+                (err) => {
+                    elGpsStatus.innerText = "GPS ERROR: " + err.message;
+                    elGpsStatus.classList.add("text-red-500");
+                },
+                { enableHighAccuracy: true }
+            );
+        }
+
+        function updateUserMarker(lat, lng) {
+            if (!userMarker) {
+                // Custom Pulse Icon
+                const pulseIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div class="relative flex h-6 w-6">
+                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                              <span class="relative inline-flex rounded-full h-6 w-6 bg-blue-500 border-2 border-white"></span>
+                           </div>`,
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+                userMarker = L.marker([lat, lng], { icon: pulseIcon }).addTo(map);
+            } else {
+                userMarker.setLatLng([lat, lng]);
+            }
+        }
+
+        // --- 2. TRACKING LOGIC ---
+
+        async function toggleTracking() {
+            if (!isTracking) {
+                // Request Motion Permission (iOS)
+                if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                    try { await DeviceMotionEvent.requestPermission(); } catch(e){}
+                }
+                
+                startSession();
+            }
+        }
+
+        function startSession() {
+            isTracking = true;
+            startTime = Date.now();
+            
+            // Reset Data
+            distance = 0; steps = 0; totalElevationGain = 0;
+            pathCoordinates = []; speedHistory = []; elevationHistory = [];
+            lastLat = null; lastLon = null;
+            
+            // Clean Map Line
+            polyline.setLatLngs([]);
+            
+            // UI Update
+            updateUIState(true);
+            speak("Activity started. Let's go!");
+
+            // Start Loops
+            timerInterval = setInterval(updateTimer, 1000);
+            
+            // GPS Watch
+            watchId = navigator.geolocation.watchPosition(
+                handleGeoSuccess, 
+                handleGeoError, 
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+            );
+            
+            // Pedometer
+            window.addEventListener('devicemotion', handleMotion);
         }
 
         function finishTracking() {
             if (!isTracking) return;
             
-            stopSensors();
-            showSummary();
+            // Stop Loops
+            clearInterval(timerInterval);
+            navigator.geolocation.clearWatch(watchId);
+            window.removeEventListener('devicemotion', handleMotion);
             
             isTracking = false;
             updateUIState(false);
+            
+            speak("Activity finished. Great job.");
+            
+            // Show Summary
+            showSummary();
         }
 
-        async function requestPermissionsAndStart() {
-            // Khusus iOS 13+ butuh requestPermission untuk DeviceMotion
-            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                try {
-                    const response = await DeviceMotionEvent.requestPermission();
-                    if (response === 'granted') {
-                        startTracking();
-                    } else {
-                        alert("Izin sensor gerak diperlukan untuk menghitung langkah.");
-                    }
-                } catch (e) {
-                    console.error(e);
-                    startTracking(); // Coba start anyway (mungkin Android/Desktop)
-                }
+        function updateUIState(active) {
+            if (active) {
+                btnStart.classList.add('hidden');
+                btnStop.classList.remove('hidden');
+                btnStop.classList.add('flex');
+                elStatusText.innerText = "RECORDING ACTIVITY";
+                elStatusText.classList.add('text-accent', 'animate-pulse');
+                recordingDot.classList.remove('hidden');
+                // Slide stats panel down slightly to reveal map more? optional.
             } else {
-                startTracking(); // Non-iOS atau iOS versi lama
+                btnStart.classList.remove('hidden');
+                btnStop.classList.add('hidden');
+                btnStop.classList.remove('flex');
+                elStatusText.innerText = "SESSION PAUSED";
+                elStatusText.classList.remove('text-accent', 'animate-pulse');
+                recordingDot.classList.add('hidden');
             }
         }
 
-        function startTracking() {
-            isTracking = true;
-            startTime = Date.now();
-            
-            // Reset Data
-            steps = 0;
-            distance = 0;
-            elevationGain = 0;
-            elevationLoss = 0;
-            speedArr = [];
-            lastLat = null; lastLon = null; lastAlt = null;
-            maxAlt = -Infinity; minAlt = Infinity;
+        // --- 3. SENSOR HANDLERS ---
 
-            // Start Timers & Listeners
-            timerInterval = setInterval(updateTimer, 1000);
-            startSensors();
-            updateUIState(true);
+        function handleGeoSuccess(pos) {
+            const crd = pos.coords;
+            const lat = crd.latitude;
+            const lng = crd.longitude;
+            const accuracy = crd.accuracy;
+            
+            if (accuracy > 30) return; // Filter bad signal
+
+            // Update Map
+            updateUserMarker(lat, lng);
+            
+            // Follow user logic
+            map.panTo([lat, lng], { animate: true, duration: 1 });
+
+            // Calculate Distance & Draw Path
+            if (lastLat !== null) {
+                const d = getDistanceFromLatLonInM(lastLat, lastLon, lat, lng);
+                
+                // Noise filter (move > 2 meters)
+                if (d > 2) {
+                    distance += d;
+                    
+                    // Add to path
+                    pathCoordinates.push([lat, lng]);
+                    polyline.setLatLngs(pathCoordinates);
+                    
+                    // Speed Calculation (GPS Speed preferred)
+                    let speedKmh = 0;
+                    if (crd.speed !== null && crd.speed >= 0) {
+                        speedKmh = crd.speed * 3.6;
+                    } else {
+                        // Fallback calc
+                        // (Not implemented for brevity, using GPS speed)
+                    }
+                    
+                    // Update Speed Bar Visual
+                    const speedPercent = Math.min((speedKmh / 20) * 100, 100); // 20km/h max bar
+                    document.getElementById('speed-bar').style.width = `${speedPercent}%`;
+                    
+                    // Store History for Chart
+                    if (pathCoordinates.length % 5 === 0) { // Sample every 5th point
+                        speedHistory.push(speedKmh);
+                        if (crd.altitude) elevationHistory.push(crd.altitude);
+                    }
+                    
+                    // Voice Feedback every 1km
+                    const distKm = distance / 1000;
+                    if (Math.floor(distKm) > Math.floor((distance - d) / 1000)) {
+                        speak(`Distance ${Math.floor(distKm)} kilometers.`);
+                    }
+
+                    // Update DOM
+                    elDist.innerText = (distance / 1000).toFixed(2);
+                    elSpeed.innerText = speedKmh.toFixed(1);
+                    elPace.innerText = calculatePace(speedKmh);
+                }
+            }
+
+            // Altitude Logic
+            if (crd.altitude !== null) {
+                const alt = crd.altitude;
+                elAlt.innerText = Math.round(alt);
+                
+                if (lastAlt !== null) {
+                    const diff = alt - lastAlt;
+                    if (diff > 0.5) totalElevationGain += diff;
+                }
+                lastAlt = alt;
+            }
+
+            lastLat = lat;
+            lastLon = lng;
+            
+            // Calorie Calc (approx)
+            const kcal = (distance / 1000) * 75 * 1.036; // Assume 75kg
+            elCal.innerText = Math.round(kcal);
         }
 
-        function updateUIState(tracking) {
-            if (tracking) {
-                btnStart.classList.add('hidden');
-                btnFinish.classList.remove('hidden');
-                btnFinish.classList.add('flex');
-                liveIndicator.classList.remove('hidden');
-            } else {
-                btnStart.classList.remove('hidden');
-                btnFinish.classList.add('hidden');
-                btnFinish.classList.remove('flex');
-                liveIndicator.classList.add('hidden');
+        function handleGeoError(err) {
+            console.warn("GPS Error", err);
+        }
+
+        function handleMotion(event) {
+            const acc = event.accelerationIncludingGravity;
+            if(!acc) return;
+            
+            // Simple magnitude calculation
+            const mag = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
+            
+            // Threshold for step
+            const now = Date.now();
+            if (mag > 11 && (now - lastStepTime > 350)) {
+                steps++;
+                lastStepTime = now;
+                elSteps.innerText = steps;
             }
         }
 
         function updateTimer() {
-            const now = Date.now();
-            const diff = now - startTime;
-            
-            const hrs = Math.floor(diff / 3600000);
-            const mins = Math.floor((diff % 3600000) / 60000);
-            const secs = Math.floor((diff % 60000) / 1000);
-            
-            uiTimer.innerText = 
-                `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            const diff = Date.now() - startTime;
+            const h = Math.floor(diff / 3600000);
+            const m = Math.floor((diff % 3600000) / 60000);
+            const s = Math.floor((diff % 60000) / 1000);
+            elTimer.innerText = `${pad(h)}:${pad(m)}:${pad(s)}`;
         }
 
-        // --- Sensor Logic ---
+        // --- 4. DATA PROCESSING & UTILS ---
 
-        function startSensors() {
-            // 1. Geolocation (GPS)
-            if ("geolocation" in navigator) {
-                gpsStatus.innerText = "Mencari sinyal...";
-                gpsIcon.classList.add("text-yellow-400");
-                
-                watchId = navigator.geolocation.watchPosition(
-                    handleGeoSuccess, 
-                    handleGeoError, 
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 5000,
-                        maximumAge: 0
-                    }
-                );
-            } else {
-                alert("Geolocation tidak didukung di browser ini.");
-            }
-
-            // 2. Pedometer (Accelerometer)
-            window.addEventListener('devicemotion', handleMotion);
-        }
-
-        function stopSensors() {
-            clearInterval(timerInterval);
-            if (watchId) navigator.geolocation.clearWatch(watchId);
-            window.removeEventListener('devicemotion', handleMotion);
-            
-            gpsStatus.innerText = "GPS Standby";
-            gpsIcon.classList.remove("text-green-400", "text-yellow-400");
-        }
-
-        function handleGeoSuccess(position) {
-            const crd = position.coords;
-            gpsStatus.innerText = `GPS Akurat (${Math.round(crd.accuracy)}m)`;
-            gpsIcon.classList.remove("text-yellow-400");
-            gpsIcon.classList.add("text-green-400");
-
-            // Ignore low accuracy points (misal > 30 meter)
-            if (crd.accuracy > 30) return;
-
-            // Hitung Jarak
-            if (lastLat !== null) {
-                const d = getDistanceFromLatLonInM(lastLat, lastLon, crd.latitude, crd.longitude);
-                // Filter noise GPS (hanya hitung jika bergerak signifikan > 2 meter)
-                if (d > 2) {
-                    distance += d;
-                    
-                    // Hitung Kecepatan (Real-time dari GPS atau kalkulasi manual)
-                    let speedKmh = 0;
-                    if (crd.speed !== null && crd.speed >= 0) {
-                        speedKmh = crd.speed * 3.6; // m/s to km/h
-                    }
-                    speedArr.push(speedKmh);
-                    uiSpeed.innerText = speedKmh.toFixed(1);
-                }
-            }
-
-            // Hitung Elevasi
-            if (crd.altitude !== null) {
-                const currentAlt = crd.altitude;
-                
-                // Update Min/Max
-                if (currentAlt > maxAlt) maxAlt = currentAlt;
-                if (currentAlt < minAlt) minAlt = currentAlt;
-
-                // Update Gain/Loss (Filter noise kecil < 1m)
-                if (lastAlt !== null) {
-                    const altDiff = currentAlt - lastAlt;
-                    if (altDiff > 1) elevationGain += altDiff;
-                    else if (altDiff < -1) elevationLoss += Math.abs(altDiff);
-                }
-                
-                lastAlt = currentAlt;
-                uiAlt.innerText = Math.round(currentAlt);
-            }
-
-            // Simpan posisi terakhir
-            lastLat = crd.latitude;
-            lastLon = crd.longitude;
-
-            // Update UI
-            uiDist.innerText = (distance / 1000).toFixed(2);
-            
-            // Update Kalori (Rumus kasar: 0.05 kcal per step + distance factor)
-            // Atau sederhana: Berat badan (misal 70kg) * jarak (km) * 1.036
-            const kcal = (distance / 1000) * 70 * 1.036;
-            uiCal.innerText = Math.round(kcal);
-        }
-
-        function handleGeoError(err) {
-            console.warn(`ERROR(${err.code}): ${err.message}`);
-            gpsStatus.innerText = "Sinyal Lemah/Hilang";
-            gpsIcon.classList.remove("text-green-400");
-            gpsIcon.classList.add("text-red-400");
-        }
-
-        function handleMotion(event) {
-            // Algoritma Pedometer Sederhana (Peak Detection)
-            const acc = event.accelerationIncludingGravity;
-            if(!acc) return;
-
-            const x = acc.x;
-            const y = acc.y;
-            const z = acc.z;
-
-            // Hitung Magnitude Vektor
-            const mag = Math.sqrt(x*x + y*y + z*z);
-            
-            // Deteksi puncak langkah
-            // Threshold diset sekitar 10-12 (gravitasi ~9.8)
-            // Perlu cooldown (misal 300ms) antar langkah agar tidak double count
-            const now = Date.now();
-            if (mag > stepThreshold + 1 && (now - lastStepTime > 350)) {
-                steps++;
-                lastStepTime = now;
-                uiSteps.innerText = steps;
-                
-                // Animasi kecil pada angka langkah
-                uiSteps.classList.add('scale-125', 'text-accent');
-                setTimeout(() => uiSteps.classList.remove('scale-125', 'text-accent'), 100);
-            }
-        }
-
-        // --- Utility: Haversine Formula ---
         function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
-            var R = 6371; // Radius bumi dalam km
-            var dLat = deg2rad(lat2-lat1);
-            var dLon = deg2rad(lon2-lon1); 
-            var a = 
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
-            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-            var d = R * c; // Jarak dalam km
-            return d * 1000; // Return meter
+            const R = 6371e3; // metres
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
         }
 
-        function deg2rad(deg) {
-            return deg * (Math.PI/180);
+        function calculatePace(speedKmh) {
+            if (speedKmh < 1) return "--:--";
+            const paceMinPerKm = 60 / speedKmh;
+            const pMin = Math.floor(paceMinPerKm);
+            const pSec = Math.round((paceMinPerKm - pMin) * 60);
+            return `${pMin}'${pad(pSec)}"`;
         }
 
-        // --- Summary & Reset ---
-        function showSummary() {
-            // Populate Data
-            const dateOpts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-            document.getElementById('summary-date').innerText = new Date().toLocaleDateString('id-ID', dateOpts);
-            
-            document.getElementById('sum-duration').innerText = uiTimer.innerText;
-            document.getElementById('sum-distance').innerText = (distance / 1000).toFixed(2) + " km";
-            document.getElementById('sum-steps').innerText = steps;
-            
-            // Altitudes
-            document.getElementById('sum-max-alt').innerText = (maxAlt === -Infinity ? 0 : Math.round(maxAlt)) + " m";
-            document.getElementById('sum-min-alt').innerText = (minAlt === Infinity ? 0 : Math.round(minAlt)) + " m";
-            document.getElementById('sum-gain').innerText = "+" + Math.round(elevationGain) + " m";
-            document.getElementById('sum-loss').innerText = "-" + Math.round(elevationLoss) + " m";
+        function pad(n) { return n < 10 ? '0'+n : n; }
 
-            // Avg Speed
-            let avgSpeed = 0;
-            if(speedArr.length > 0) {
-                const sum = speedArr.reduce((a, b) => a + b, 0);
-                avgSpeed = (sum / speedArr.length) || 0;
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US'; // Bahasa Inggris terdengar lebih natural untuk fitness
+                utterance.rate = 1.1;
+                window.speechSynthesis.speak(utterance);
             }
-            document.getElementById('sum-avg-speed').innerText = avgSpeed.toFixed(1) + " km/j";
+        }
+
+        // --- 5. SUMMARY & HISTORY ---
+
+        function showSummary() {
+            const modal = document.getElementById('summary-modal');
+            const dateOpts = { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' };
+            
+            // Isi Data Summary
+            document.getElementById('sum-date').innerText = new Date().toLocaleDateString('id-ID', dateOpts);
+            document.getElementById('sum-dist').innerHTML = (distance/1000).toFixed(2) + ' <span class="text-sm font-normal text-gray-500">km</span>';
+            document.getElementById('sum-time').innerText = elTimer.innerText;
+            document.getElementById('sum-cals').innerHTML = elCal.innerText + ' <span class="text-sm font-normal text-gray-500">kcal</span>';
+            
+            // Hitung Avg Pace Total
+            const durationHours = (Date.now() - startTime) / 3600000;
+            const totalAvgSpeed = (distance/1000) / durationHours;
+            document.getElementById('sum-pace').innerHTML = calculatePace(totalAvgSpeed) + ' <span class="text-sm font-normal text-gray-500">/km</span>';
 
             // Show Modal
-            modal.classList.remove('hidden', 'flex');
+            modal.classList.remove('hidden');
             modal.classList.add('flex');
-            // Sedikit delay agar transisi opacity jalan
-            setTimeout(() => {
-                modal.classList.remove('opacity-0');
-            }, 10);
+            
+            // Render Chart JS
+            renderChart();
+            
+            // Save to History
+            saveActivity({
+                date: new Date().toISOString(),
+                dist: (distance/1000).toFixed(2),
+                time: elTimer.innerText,
+                kcal: elCal.innerText
+            });
+        }
+
+        let myChart = null;
+        function renderChart() {
+            const ctx = document.getElementById('activityChart').getContext('2d');
+            
+            if (myChart) myChart.destroy();
+            
+            // Create simplistic labels (just counting points)
+            const labels = speedHistory.map((_, i) => i);
+            
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Speed (km/h)',
+                        data: speedHistory,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { 
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#94a3b8' } 
+                        }
+                    }
+                }
+            });
         }
 
         function closeSummary() {
-            modal.classList.add('opacity-0');
-            setTimeout(() => {
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
-                
-                // Reset UI Dashboard
-                uiTimer.innerText = "00:00:00";
-                uiSpeed.innerText = "0.0";
-                uiSteps.innerText = "0";
-                uiDist.innerText = "0.00";
-                uiAlt.innerText = "0";
-                uiCal.innerText = "0";
-            }, 300);
+            document.getElementById('summary-modal').classList.add('hidden');
+            document.getElementById('summary-modal').classList.remove('flex');
+            // Reset UI timer
+            elTimer.innerText = "00:00:00";
+            elDist.innerText = "0.00";
+            elSpeed.innerText = "0.0";
+            document.getElementById('speed-bar').style.width = "0%";
         }
+
+        // --- 6. LOCAL STORAGE HISTORY ---
+
+        function saveActivity(data) {
+            let history = JSON.parse(localStorage.getItem('geomotion_history')) || [];
+            history.unshift(data); // Add to top
+            if(history.length > 20) history.pop(); // Keep last 20
+            localStorage.setItem('geomotion_history', JSON.stringify(history));
+            loadHistory();
+        }
+
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('geomotion_history')) || [];
+            const container = document.getElementById('history-list');
+            container.innerHTML = "";
+            
+            if (history.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-500 mt-10 text-sm">Belum ada riwayat.</div>';
+                return;
+            }
+
+            history.forEach(item => {
+                const dateObj = new Date(item.date);
+                const dateStr = dateObj.toLocaleDateString('id-ID', { day:'numeric', month:'short' });
+                
+                const el = document.createElement('div');
+                el.className = "bg-white/5 p-4 rounded-xl mb-3 border border-white/5 flex justify-between items-center";
+                el.innerHTML = `
+                    <div>
+                        <div class="text-white font-bold text-lg">${item.dist} km</div>
+                        <div class="text-xs text-gray-400">${dateStr} • ${item.time}</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-orange-400 font-bold text-sm">${item.kcal} kcal</div>
+                        <i class="fas fa-chevron-right text-gray-600 text-xs"></i>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+        function toggleHistory() {
+            const modal = document.getElementById('history-modal');
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                setTimeout(() => modal.classList.remove('opacity-0'), 10);
+            } else {
+                modal.classList.add('opacity-0');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            }
+        }
+        
+        function clearHistory() {
+            if(confirm("Hapus semua riwayat?")) {
+                localStorage.removeItem('geomotion_history');
+                loadHistory();
+            }
+        }
+
     </script>
 </body>
 </html>
